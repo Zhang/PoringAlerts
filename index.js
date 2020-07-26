@@ -1,8 +1,6 @@
 const request = require('request');
 const _ = require('lodash');
-const SparkPost = require('sparkpost');
-
-const client = new SparkPost(/* USE YOUR OWN CLIENT HERE */);
+const send = require('gmail-send')
 
 const get = async (options) => (
   new Promise(async (resolve, reject) => {
@@ -16,56 +14,118 @@ const get = async (options) => (
   })
 );
 
+const waitFor = (seconds) => (new Promise((resolve) => { setTimeout(() => { resolve(); }, seconds); }));
+
 const sendAlert = async (subject, message, email) => {
+  console.log(message);
   new Promise(async (resolve, reject) => {
-    client.transmissions.send({
-      content: {
-        from: 'email@ragnarokMarket.com',
-        subject: `${subject}`,
-        html: `<html><body><p>${message}</p></body></html>`,
-      },
-      recipients: [{ address: email }],
-    }, (err) => {
-      if (err) { reject(err); } else { resolve(); }
-    });
+    send({
+      user: '',
+      pass: '',
+      to: [email],
+      subject,
+      text: message,
+    })({}, function(err, result) {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(result)
+      }
+    })
   })
 };
 
 const getRequestBody = async (queryString) => {
   const { body } = await get({ url: `https://poring.world/api/search?${queryString}` });
-  return JSON.parse(body);
+
+  let bodyParsed;
+  try {
+    bodyParsed = JSON.parse(body);
+  } catch (e) {
+    console.log('error');
+    bodyParsed = null;
+  }
+
+  return bodyParsed;
 };
 
 const newAlert = async (queryString, alertStrings) => {
   const alertBody = await getRequestBody(queryString);
 
-  const toAlert = _.filter(
-    alertBody,
-    ({ name }) => (_.some(alertStrings, (alertOn) => { return name.includes(alertOn) })),
-  );
+  if (alertBody) {
+    const toAlert = _.filter(
+      alertBody,
+      ({ name }) => (_.some(alertStrings, (alertOn) => { return name.includes(alertOn) || alertStrings[0] === '*' })),
+    );
 
-  return _.map(toAlert, ({ lastRecord, name }) => ({
-    html: `<div>${name} - ${lastRecord.price}</div>`,
-    name,
-  }));
+    return _.map(toAlert, ({ lastRecord, name }) => ({
+      html: `<div>${name} - ${lastRecord.price}</div>`,
+      name,
+    }));
+  } else {
+    return [];
+  }
 };
 
 const runAlerts = async () => {
   console.log('Alerting');
 
-  const ancientCapeAlerts = await newAlert(
-    // Replace your category w/ the item you're looking for
-    'order=popularity&rarity=&inStock=1&modified=&category=&endCategory=&q=ancient%20cape',
-    // Casing matters
-    ['Divine blessing 3', 'Divine blessing 4'],
-  );
+  const MVPCards = [
+    'Drake Card',
+    'Stormy Knight Card',
+    'Owl Baron Card',
+    'Maya Card',
+    'Drake ★ Card',
+    'Eddga Card',
+    'Angeling Card',
+    'Goblin Leader Card',
+    'Phreeoni Card',
+    'Phreeoni ★ Card',
+    'Garm Card',
+    'Spashire Card',
+    'Mistress Card',
+    'Time Holder Card',
+    'Chimera Card',
+    'Golden Thief Bug Card',
+    'Detarderous Card',
+    'Orc Lord Helm Card',
+    'Deviling Card',
+    'Doppelganger Card',
+    'Chepet Card',
+    'Eddga ★ Card',
+    'Cenia Card',
+    'Kobold Leader Card',
+    'Deje Card',
+    'Osiris ★ card',
+    'Chimera ★ Card',
+    'Osiris Card',
+    'Phreeoni the Revenant Card',
+    'Osiris ★ Card',
+    'Detarderous ★ Card',
+    'Dead Eddga Card'
+  ];
 
-  const alerts = [...ancientCapeAlerts];
+  const encodedCards = _.map(MVPCards, (name) => encodeURIComponent(name));
+
+  let alerts = [];
+  for (let i = 0; i < encodedCards.length; i += 1) {
+    console.log(`order=popularity&rarity=&inStock=1&modified=&category=&endCategory=&q=${encodedCards[i]}`);
+    const alertMessages = await newAlert(
+      `order=popularity&rarity=&inStock=1&modified=&category=&endCategory=&q=${encodedCards[i]}`,
+      ['*'],
+    );
+    if (!_.isEmpty(alertMessages)) {
+      console.log(alertMessages);
+      alerts = _.compact(alerts.concat(alertMessages));
+    }
+    await waitFor(3000);
+  }
 
   if (!_.isEmpty(alerts)) {
     await sendAlert(
       `Item alerts ${_.map(alerts, 'name')}`,
-      _.map(alerts, 'html').join('</br>')
+      _.map(alerts, 'html').join('</br>'),
+      'scottzhang235@gmail.com',
     );
   }
 

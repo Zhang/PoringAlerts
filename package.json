@@ -9,6 +9,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "gmail-send": "^1.8.10",
     "lodash": "^4.17.15",
     "request": "^2.88.0",
     "sparkpost": "^2.1.4"
